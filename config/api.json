@@ -2,7 +2,7 @@
     "provider": "google_palm",
     "base_url": "https://generativelanguage.googleapis.com/v1beta2",
     "model_name": "models/gemini-1.0",
-    "api_key_env_var": "AIzaSyB3kx1ctPMHbBUmPP3F72bniIf-RebqwkE",
+    "api_key_env_var": "Google_API",
   
     "parameters": {
       "temperature": 0.7,
