@@ -1,14 +1,17 @@
-
 import React, { useState, useEffect } from 'react';
 
 const App = () => {
-  // TODO: Replace with actual user ID from authentication context
-  const userId = 'user123';
+  const userId = 'Jerry520';
 
   const [text, setText] = useState('');
   const [imageFile, setImageFile] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [latestImgUrl, setLatestImgUrl] = useState(null);
 
-  // 监听粘贴事件，支持从剪贴板粘贴图片
+  // 标记“上次服务端图片URL”，只要服务端图片URL没变就不会再弹窗
+  const [shownServerImgUrl, setShownServerImgUrl] = useState(null);
+
+  // 粘贴上传
   useEffect(() => {
     const handlePaste = (e) => {
       const items = e.clipboardData?.items;
@@ -26,7 +29,7 @@ const App = () => {
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  // 拖拽上传图片
+  // 拖拽上传
   const handleDrop = (e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
@@ -49,30 +52,73 @@ const App = () => {
       return;
     }
 
-    const timestamp = Date.now();
-    const queryId = `${userId}_${timestamp}`;
+    const timestamp = Date.now().toString();
+    const uid = userId || 'Jerry520';
 
-    // 构造 FormData 发送给后端 Agent
     const formData = new FormData();
-    formData.append('id', queryId);
-    formData.append('text', text);
-    formData.append('image', imageFile);
+    formData.append('file', imageFile);
+    formData.append('requirement', text);
+    formData.append('userId', uid);
+    formData.append('timestamp', timestamp);
+
+    const host = window.location.hostname;
+    const url = `http://${host}:9527/process/`;
 
     try {
-      const response = await fetch('/api/trigger-agent', {
+      const response = await fetch(url, {
         method: 'POST',
         body: formData,
       });
       if (!response.ok) throw new Error('触发 Agent 失败');
-      console.log('Agent 已唤醒，queryId:', queryId);
-      // 重置表单
       setText('');
       setImageFile(null);
+      setShownServerImgUrl(null); // 新任务允许检测下一个新图片
     } catch (error) {
       console.error('Error triggering agent:', error);
       alert('提交失败，请稍后重试');
     }
   };
+
+  // 轮询2333端口，弹窗展示新图片
+  useEffect(() => {
+    let timer;
+    let lastBlobUrl = null;
+    async function poll() {
+      try {
+        const res = await fetch('http://localhost:2333/latest-image', { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          // 只要后端图片url和已弹窗的url不一样，才弹窗
+          if (data.imageUrl && data.imageUrl !== shownServerImgUrl) {
+            const imgRes = await fetch(data.imageUrl + '?t=' + Date.now(), { cache: "no-store" });
+            if (imgRes.ok) {
+              const blob = await imgRes.blob();
+              if (blob.size > 0) {
+                // 清理旧blob
+                if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+                const url = URL.createObjectURL(blob);
+                setLatestImgUrl(url);
+                setModalOpen(true);
+                setShownServerImgUrl(data.imageUrl); // 标记已弹窗
+                lastBlobUrl = url;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // 忽略网络错误
+      } finally {
+        timer = setTimeout(poll, 2000);
+      }
+    }
+    poll();
+    return () => {
+      clearTimeout(timer);
+      // 卸载时释放blob
+      if (latestImgUrl) URL.revokeObjectURL(latestImgUrl);
+    };
+    // 只依赖 shownServerImgUrl 保证逻辑正确
+  }, [shownServerImgUrl, latestImgUrl]);
 
   return (
     <div
@@ -82,7 +128,7 @@ const App = () => {
         alignItems: 'center',
         justifyContent: 'center',
         width: '100vw',
-        height: '100vh',
+        minHeight: '100vh',
         padding: '2rem',
         boxSizing: 'border-box',
         fontFamily: 'Arial, sans-serif',
@@ -168,9 +214,42 @@ const App = () => {
           提交
         </button>
       </form>
+
+      {/* 弹窗展示生成图片 */}
+      {modalOpen && latestImgUrl && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}
+          onClick={() => setModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 2px 8px #0001',
+              maxWidth: '80vw', maxHeight: '80vh'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2>生成图片</h2>
+            <img
+              src={latestImgUrl}
+              alt="生成结果"
+              style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 4 }}
+            />
+            <div style={{ textAlign: 'right', marginTop: 16 }}>
+              <button onClick={() => setModalOpen(false)}
+                style={{ padding: '6px 18px', borderRadius: 4, border: 'none', background: '#4285f4', color: '#fff', fontSize: 16 }}
+              >关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default App;
-

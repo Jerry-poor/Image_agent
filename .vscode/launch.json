@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run with diffusion env",
+        "type": "python",
+        "request": "launch",
+        "program": "${file}",                       
+        "console": "internalConsole",                
+        "python": "C:/Users/UIC/anaconda3/envs/diffusion/python.exe"  
+      }
+    ]
+  }
+  
